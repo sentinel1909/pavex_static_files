@@ -1,159 +1,80 @@
 // src/static_files.rs
 
 // dependencies
-use mime_guess::from_path;
 use std::borrow::Cow;
-use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-pub trait StaticFileHandler {
-    /// Given a request path (e.g., `/assets/app.js`), return a response or an error.
-    fn handle_request(&self, path: &str) -> Result<StaticFileResponse, StaticFileError>;
-}
-
-// struct type to represent a static asset, CCSS, JS, an image, or anything else
+// struct type which represents configuration for a static file server
 #[derive(Debug, Clone)]
-pub struct StaticFilesConfig {
-    mount_path: Cow<'static, str>,
-    directory: PathBuf,
+pub struct StaticServerConfig {
+    pub mount_path: Cow<'static, str>,
+    pub root_dir: PathBuf,
+    pub serve_index: bool,
 }
 
-#[derive(Debug)]
-pub struct StaticFileResponse {
-    pub body: Vec<u8>,
-    pub content_type: String,
+// struct type which represents the static file server
+pub struct StaticServer {
+    mount_path: String,
+    root_dir: PathBuf,
+    serve_index: bool,
 }
 
-#[derive(Debug)]
-pub enum StaticFileError {
-    NotFound,
-    Io(std::io::Error),
+// methods for the StaticServer type
+impl StaticServer {
+    pub fn from_config(config: StaticServerConfig) -> Self {
+        let mount_path = normalize_mount_path(config.mount_path.as_ref());
+        StaticServer {
+            mount_path,
+            root_dir: config.root_dir,
+            serve_index: config.serve_index,
+        }
+    }
+
+    pub fn resolve(&self, request_path: &str) -> Option<PathBuf> {
+        if !request_path.starts_with(&self.mount_path) {
+            return None;
+        }
+
+        // Strip the mount path from the request path
+        let relative_path = request_path
+            .strip_prefix(&self.mount_path)
+            .unwrap_or("")
+            .trim_start_matches('/');
+
+        // Join the relative path to the root directory
+        let mut full_path = self.root_dir.join(relative_path);
+
+        // If it's a directory and `serve_index` is true, try to serve index.html
+        if full_path.is_dir() && self.serve_index {
+            full_path = full_path.join("index.html");
+        }
+
+        // Only return it if the file exists and is not a directory
+        if full_path.exists() && full_path.is_file() {
+            Some(full_path)
+        } else {
+            None
+        }
+    }
+
+    pub fn guess_mime_type(&self, path: &Path) -> String {
+        mime_guess::from_path(path)
+            .first_or_octet_stream()
+            .to_string()
+    }
 }
 
-// helper function which normalizes the mount path
-fn normalize_mount_path(path: Cow<'_, str>) -> Cow<'_, str> {
+// helper function to normalize the mount path of the StaticServer
+fn normalize_mount_path(path: &str) -> String {
     if path == "/" {
-        return Cow::Borrowed("/");
+        return "/".to_string();
     }
 
     let trimmed = path.trim_end_matches('/');
 
-    let normalized = if trimmed.starts_with('/') {
+    if trimmed.starts_with('/') {
         trimmed.to_string()
     } else {
         format!("/{}", trimmed)
-    };
-
-    Cow::Owned(normalized)
-}
-
-// methods for the StaticFiles type
-impl StaticFilesConfig {
-    pub fn new<T, U>(mount_path: T, directory: U) -> Self
-    where
-        T: Into<Cow<'static, str>>,
-        U: Into<PathBuf>,
-    {
-        let raw_path: Cow<'static, str> = mount_path.into();
-        let normalized_path = normalize_mount_path(raw_path);
-
-        StaticFilesConfig {
-            mount_path: normalized_path,
-            directory: directory.into(),
-        }
-    }
-
-    pub fn build(mount_path: &'static str, directory: PathBuf) -> Self {
-        let raw_path = Cow::Borrowed(mount_path);
-        let normalized_path = normalize_mount_path(raw_path);
-
-        StaticFilesConfig { mount_path: normalized_path, directory }
-    }
-
-    pub fn resolve_path(&self, request_path: &str) -> Option<PathBuf> {
-        if !request_path.starts_with(self.mount_path.as_ref()) {
-            return None;
-        }
-
-        let relative_path = request_path
-            .strip_prefix(self.mount_path.as_ref())
-            .unwrap_or("")
-            .trim_start_matches('/');
-        let full_path = self.directory.join(relative_path);
-
-        Some(full_path)
-    }
-}
-
-impl StaticFileHandler for StaticFilesConfig {
-    fn handle_request(&self, path: &str) -> Result<StaticFileResponse, StaticFileError> {
-        let full_path = self.resolve_path(path).ok_or(StaticFileError::NotFound)?;
-
-        let path_to_serve = if full_path.is_dir() {
-            full_path.join("index.html")
-        } else {
-            full_path
-        };
-
-        if !path_to_serve.exists() || !path_to_serve.is_file() {
-            return Err(StaticFileError::NotFound);
-        }
-
-        let body = fs::read(&path_to_serve).map_err(StaticFileError::Io)?;
-        let content_type = from_path(&path_to_serve)
-            .first_or_octet_stream()
-            .to_string();
-
-        Ok(StaticFileResponse { body, content_type })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-    use tempfile::tempdir;
-
-    #[test]
-    fn serves_static_file_successfully() {
-        // Create a temp directory
-        let dir = tempdir().unwrap();
-        let file_path = dir.path().join("hello.txt");
-
-        // Write a file inside it
-        let mut file = std::fs::File::create(&file_path).unwrap();
-        write!(file, "Hello, world!").unwrap(); // no newline
-
-        // Create StaticFiles with that directory
-        let static_files = StaticFilesConfig::build("/static", PathBuf::from(dir.path()));
-
-        // Try to handle a request to the file
-        let result = static_files.handle_request("/static/hello.txt");
-
-        assert!(result.is_ok());
-        let response = result.unwrap();
-        let body_str = String::from_utf8(response.body).unwrap();
-
-        assert_eq!(body_str, "Hello, world!");
-        assert_eq!(response.content_type, "text/plain");
-
-        // tempdir cleans up automatically when it goes out of scope
-    }
-
-    #[test]
-    fn returns_not_found_for_missing_file() {
-        // Create a temp directory
-        let dir = tempdir().unwrap();
-
-        // Create StaticFiles mounted at "/static" using the temp dir
-        let static_files = StaticFilesConfig::build("/static", PathBuf::from(dir.path()));
-
-        // Request a file that doesn't exist
-        let result = static_files.handle_request("/static/does_not_exist.txt");
-
-        // Assert that we got a NotFound error
-        assert!(matches!(result, Err(StaticFileError::NotFound)));
-
-        // Temp directory is automatically cleaned up
     }
 }
