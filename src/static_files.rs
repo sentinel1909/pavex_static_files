@@ -13,8 +13,8 @@ pub trait StaticFileHandler {
 
 // struct type to represent a static asset, CCSS, JS, an image, or anything else
 #[derive(Debug, Clone)]
-pub struct StaticFiles<'a> {
-    mount_path: Cow<'a, str>,
+pub struct StaticFilesConfig {
+    mount_path: Cow<'static, str>,
     directory: PathBuf,
 }
 
@@ -48,16 +48,16 @@ fn normalize_mount_path(path: Cow<'_, str>) -> Cow<'_, str> {
 }
 
 // methods for the StaticFiles type
-impl<'a> StaticFiles<'a> {
-    pub fn new<T, U>(mount_path: T, directory: U) -> Self
+impl StaticFilesConfig {
+    pub fn build<T, U>(mount_path: T, directory: U) -> Self
     where
-        T: Into<Cow<'a, str>>,
+        T: Into<Cow<'static, str>>,
         U: Into<PathBuf>,
     {
-        let raw_path: Cow<'a, str> = mount_path.into();
+        let raw_path: Cow<'static, str> = mount_path.into();
         let normalized_path = normalize_mount_path(raw_path);
 
-        StaticFiles {
+        StaticFilesConfig {
             mount_path: normalized_path,
             directory: directory.into(),
         }
@@ -78,7 +78,7 @@ impl<'a> StaticFiles<'a> {
     }
 }
 
-impl StaticFileHandler for StaticFiles<'_> {
+impl StaticFileHandler for StaticFilesConfig {
     fn handle_request(&self, path: &str) -> Result<StaticFileResponse, StaticFileError> {
         let full_path = self.resolve_path(path).ok_or(StaticFileError::NotFound)?;
 
@@ -118,7 +118,7 @@ mod tests {
         write!(file, "Hello, world!").unwrap(); // no newline
 
         // Create StaticFiles with that directory
-        let static_files = StaticFiles::new("/static", dir.path());
+        let static_files = StaticFilesConfig::build("/static", dir.path());
 
         // Try to handle a request to the file
         let result = static_files.handle_request("/static/hello.txt");
@@ -139,7 +139,7 @@ mod tests {
         let dir = tempdir().unwrap();
 
         // Create StaticFiles mounted at "/static" using the temp dir
-        let static_files = StaticFiles::new("/static", dir.path());
+        let static_files = StaticFilesConfig::build("/static", dir.path());
 
         // Request a file that doesn't exist
         let result = static_files.handle_request("/static/does_not_exist.txt");
