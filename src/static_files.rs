@@ -1,11 +1,12 @@
 // src/static_files.rs
 
 // dependencies
+use serde::Deserialize;
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
 
 // struct type which represents configuration for a static file server
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct StaticServerConfig {
     pub mount_path: Cow<'static, str>,
     pub root_dir: PathBuf,
