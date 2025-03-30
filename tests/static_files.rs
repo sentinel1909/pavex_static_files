@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::io::Write;
+use std::path::PathBuf;
 use tempfile::tempdir;
 
 // Bring your module into scope
@@ -17,7 +18,7 @@ fn integration_serves_file_from_tempdir() {
     file.flush().unwrap();
 
     // Create StaticFiles instance
-    let static_files = StaticFilesConfig::build("/static", dir.path());
+    let static_files = StaticFilesConfig::build("/static", PathBuf::from(dir.path()));
 
     // Simulate a request
     let result = static_files.handle_request("/static/hello.txt");
@@ -38,7 +39,7 @@ fn integration_returns_not_found_for_missing_file() {
     let dir = tempdir().unwrap();
 
     // Set up the static file handler
-    let static_files = StaticFilesConfig::build("/static", dir.path());
+    let static_files = StaticFilesConfig::build("/static", PathBuf::from(dir.path()));
 
     // Simulate a request to a non-existent file
     let result = static_files.handle_request("/static/missing.txt");

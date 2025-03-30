@@ -49,7 +49,7 @@ fn normalize_mount_path(path: Cow<'_, str>) -> Cow<'_, str> {
 
 // methods for the StaticFiles type
 impl StaticFilesConfig {
-    pub fn build<T, U>(mount_path: T, directory: U) -> Self
+    pub fn new<T, U>(mount_path: T, directory: U) -> Self
     where
         T: Into<Cow<'static, str>>,
         U: Into<PathBuf>,
@@ -61,6 +61,13 @@ impl StaticFilesConfig {
             mount_path: normalized_path,
             directory: directory.into(),
         }
+    }
+
+    pub fn build(mount_path: &'static str, directory: PathBuf) -> Self {
+        let raw_path = Cow::Borrowed(mount_path);
+        let normalized_path = normalize_mount_path(raw_path);
+
+        StaticFilesConfig { mount_path: normalized_path, directory }
     }
 
     pub fn resolve_path(&self, request_path: &str) -> Option<PathBuf> {
@@ -118,7 +125,7 @@ mod tests {
         write!(file, "Hello, world!").unwrap(); // no newline
 
         // Create StaticFiles with that directory
-        let static_files = StaticFilesConfig::build("/static", dir.path());
+        let static_files = StaticFilesConfig::build("/static", PathBuf::from(dir.path()));
 
         // Try to handle a request to the file
         let result = static_files.handle_request("/static/hello.txt");
@@ -139,7 +146,7 @@ mod tests {
         let dir = tempdir().unwrap();
 
         // Create StaticFiles mounted at "/static" using the temp dir
-        let static_files = StaticFilesConfig::build("/static", dir.path());
+        let static_files = StaticFilesConfig::build("/static", PathBuf::from(dir.path()));
 
         // Request a file that doesn't exist
         let result = static_files.handle_request("/static/does_not_exist.txt");
