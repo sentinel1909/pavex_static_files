@@ -1,0 +1,10 @@
+[package]
+name = "pavex_static_files"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+mime_guess = "2.0.5"
+
+[dev-dependencies]
+tempfile = "3"
