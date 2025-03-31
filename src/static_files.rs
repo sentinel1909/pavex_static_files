@@ -3,6 +3,7 @@
 // dependencies
 use serde::Deserialize;
 use std::borrow::Cow;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 // struct type which represents configuration for a static file server
@@ -32,6 +33,24 @@ pub struct StaticFile {
 pub enum ServeError {
     NotFound,
     Io(std::io::Error),
+}
+
+impl fmt::Display for ServeError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ServeError::NotFound => write!(f, "File not found"),
+            ServeError::Io(err) => write!(f, "IO error: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for ServeError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            ServeError::Io(err) => Some(err),
+            _ => None,
+        }
+    }
 }
 
 // methods for the StaticServer type
