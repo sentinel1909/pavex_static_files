@@ -2,9 +2,7 @@ use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;
 
-use pavex_static_files::static_files::{
-    StaticServer, StaticServerConfig,
-};
+use pavex_static_files::static_files::{ServeError, StaticServer, StaticServerConfig};
 
 #[test]
 fn serves_js_and_css_mime_types() {
@@ -32,3 +30,35 @@ fn serves_js_and_css_mime_types() {
     let css = server.read_file("/static/style.css").unwrap();
     assert_eq!(css.mime_type, "text/css");
 }
+
+#[test]
+fn blocks_path_traversal_attempts() {
+    let dir = tempfile::tempdir().unwrap();
+
+    // Create a real file inside root
+    let file_path = dir.path().join("safe.txt");
+    std::fs::write(&file_path, "OK").unwrap();
+
+    // Create a file outside root (in parent)
+    let outside_file = dir.path().parent().unwrap().join("outside.txt");
+    std::fs::write(&outside_file, "NOPE").unwrap();
+
+    let config = StaticServerConfig {
+        mount_path: "/static".into(),
+        root_dir: dir.path().to_path_buf(),
+        serve_index: false,
+    };
+
+    let server = StaticServer::from_config(config);
+
+    // Normal file resolves fine
+    assert!(server.read_file("/static/safe.txt").is_ok());
+
+    // Path traversal attempt returns NotFound
+    let result = server.read_file("/static/../outside.txt");
+    assert!(matches!(result, Err(ServeError::NotFound)));
+
+    // Clean up the outside file
+    std::fs::remove_file(&outside_file).unwrap();
+}
+

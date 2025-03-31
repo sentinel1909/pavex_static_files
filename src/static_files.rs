@@ -4,6 +4,7 @@
 use serde::Deserialize;
 use std::borrow::Cow;
 use std::fmt;
+use std::fs::canonicalize;
 use std::path::{Path, PathBuf};
 
 // struct type which represents configuration for a static file server
@@ -83,9 +84,16 @@ impl StaticServer {
             full_path = full_path.join("index.html");
         }
 
+        let canonical_full = canonicalize(&full_path).ok()?;
+        let canonical_root = canonicalize(&self.root_dir).ok()?;
+
+        if !canonical_full.starts_with(&canonical_root) {
+            return None;
+        }
+
         // Only return it if the file exists and is not a directory
-        if full_path.exists() && full_path.is_file() {
-            Some(full_path)
+        if canonical_full.exists() && canonical_full.is_file() {
+            Some(canonical_full)
         } else {
             None
         }
@@ -145,9 +153,9 @@ fn normalize_mount_path(path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tempfile::tempdir;
     use std::fs::{self, File};
     use std::io::Write;
+    use tempfile::tempdir;
 
     #[test]
     fn serves_existing_file() {
@@ -233,4 +241,3 @@ mod tests {
         assert!(matches!(result, Err(ServeError::NotFound)));
     }
 }
-
