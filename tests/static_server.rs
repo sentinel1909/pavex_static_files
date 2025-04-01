@@ -1,8 +1,9 @@
 use std::fs::File;
 use std::io::Write;
 use tempfile::tempdir;
-
-use pavex_static_files::static_files::{ServeError, StaticServer, StaticServerConfig};
+use pavex_static_files::config::StaticServerConfig;
+use pavex_static_files::errors::ServeError;
+use pavex_static_files::static_server::StaticServer;
 
 #[test]
 fn serves_js_and_css_mime_types() {

@@ -1,19 +1,11 @@
-// src/static_files.rs
+// src/static_server.rs
 
 // dependencies
-use serde::Deserialize;
-use std::borrow::Cow;
-use std::fmt;
+use crate::config::StaticServerConfig;
+use crate::errors::ServeError;
 use std::fs::canonicalize;
+use std::borrow::Cow;
 use std::path::{Path, PathBuf};
-
-// struct type which represents configuration for a static file server
-#[derive(Clone, Debug, Deserialize)]
-pub struct StaticServerConfig {
-    pub mount_path: Cow<'static, str>,
-    pub root_dir: PathBuf,
-    pub serve_index: bool,
-}
 
 // struct type which represents the static file server
 pub struct StaticServer {
@@ -30,32 +22,9 @@ pub struct StaticFile {
     pub path: PathBuf,
 }
 
-#[derive(Debug)]
-pub enum ServeError {
-    NotFound,
-    Io(std::io::Error),
-}
-
-impl fmt::Display for ServeError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ServeError::NotFound => write!(f, "File not found"),
-            ServeError::Io(err) => write!(f, "IO error: {}", err),
-        }
-    }
-}
-
-impl std::error::Error for ServeError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            ServeError::Io(err) => Some(err),
-            _ => None,
-        }
-    }
-}
-
 // methods for the StaticServer type
 impl StaticServer {
+    // create a static file server from it's configuration values
     pub fn from_config(config: StaticServerConfig) -> Self {
         let mount_path = normalize_mount_path(config.mount_path.as_ref());
         StaticServer {
@@ -65,6 +34,7 @@ impl StaticServer {
         }
     }
 
+    // resolve the file to be served, using the incoming request path
     pub fn resolve(&self, request_path: &str) -> Option<PathBuf> {
         if !request_path.starts_with(&self.mount_path) {
             return None;
@@ -99,6 +69,7 @@ impl StaticServer {
         }
     }
 
+    // read the file from disk
     pub fn read_file(&self, request_path: &str) -> Result<StaticFile, ServeError> {
         let file_path = self.resolve(request_path).ok_or(ServeError::NotFound)?;
 
@@ -113,14 +84,17 @@ impl StaticServer {
         })
     }
 
+    // utility to return the mount path
     pub fn mount_path(&self) -> &str {
         &self.mount_path
     }
 
+    // utility to return the root dir
     pub fn root_dir(&self) -> &Path {
         &self.root_dir
     }
 
+    // utility to return whether serving index.html is true or false
     pub fn serve_index(&self) -> bool {
         self.serve_index
     }
